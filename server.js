@@ -4,26 +4,19 @@ const host = process.env.HOST || '0.0.0.0';
 const port = process.env.PORT || 8080;
 
 cors_proxy.createServer({
-    originWhitelist: [],           // allow all origins
-    requireHeader: [],             // disable missing headers
-    removeHeaders: ['cookie','cookie2'],
-    setHeaders: {
+    originWhitelist: [],          // allow all origins
+    requireHeader: [],            // disable origin/x-requested-with requirement
+    removeHeaders: ['cookie','cookie2'], // strip cookies
+    setHeaders: {                 // allow iframes
         'X-Frame-Options': '',
         'Content-Security-Policy': ''
     },
-    redirectSameOrigin: true,      // follow redirects
-    handleInitialRequest: function(req, res, location) {
-        console.log(`Requesting: ${req.url}`);
-        return true; // allow all requests
+    redirectSameOrigin: true,     // follow redirects
+    proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
+        proxyReqOpts.headers['User-Agent'] = srcReq.headers['user-agent'] || 'Mozilla/5.0';
+        return proxyReqOpts;
     },
-    // Optional: rewrite HTML to proxy-relative URLs for resources
-    decorateHtmlResponse: function(req, res, html) {
-        if(!html) return html;
-        // Rewrite <a href> and <link/src> URLs to go through proxy
-        return html
-            .replace(/href="(http[s]?:\/\/[^"]+)"/g, `href="${req.protocol}//${req.headers.host}/$1"`)
-            .replace(/src="(http[s]?:\/\/[^"]+)"/g, `src="${req.protocol}//${req.headers.host}/$1"`);
-    }
+    proxyReqBodyDecorator: (bodyContent, srcReq) => bodyContent
 }).listen(port, host, () => {
-    console.log(`🚀 Full-featured CORS proxy running on http://${host}:${port}`);
+    console.log(`🚀 Full iframe-compatible CORS proxy running at http://${host}:${port}`);
 });
