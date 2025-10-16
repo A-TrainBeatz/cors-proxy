@@ -1,0 +1,12 @@
+{
+  "name": "my-cors-proxy",
+  "version": "1.0.0",
+  "description": "Self-hosted CORS proxy",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors-anywhere": "^0.4.4"
+  }
+}
