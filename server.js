@@ -1,51 +1,68 @@
 // server.js
+const cors_proxy = require("cors-anywhere");
+const express = require("express");
+const puppeteer = require("puppeteer");
 
-const host = process.env.HOST || '0.0.0.0';
+const app = express();
+const host = process.env.HOST || "0.0.0.0";
 const port = process.env.PORT || 8080;
 
-const cors_proxy = require('cors-anywhere');
-
-// Create proxy server
+// --------------- CORS Proxy -----------------
 cors_proxy.createServer({
-  // Allow all origins
-  originWhitelist: [],
-
-  // Require headers to stop abuse, but frontend adds these automatically
+  originWhitelist: [], // allow all origins
   requireHeader: ['origin', 'x-requested-with'],
-
-  // Strip cookies for security
-  removeHeaders: ['cookie', 'cookie2'],
-
-  // Make sure redirects work properly
-  httpProxyOptions: {
-    followRedirects: true,
-    maxRedirects: 10,
-    changeOrigin: true
-  },
-
-  // Extra proxy options for video/audio support
-  httpsOptions: {
-    rejectUnauthorized: false, // allow self-signed SSL if encountered
-  },
-
-  // Rewrites for proper formatting
-  // Fixes relative paths in scripts, CSS, and images
+  removeHeaders: ['cookie', 'cookie2', 'x-frame-options', 'content-security-policy'],
+  redirectSameOrigin: true,
   handleInitialRequest: (req, res, location) => {
-    console.log("Proxying request to:", location);
-
-    // Twitch, YouTube, Reddit, etc. use video chunk requests
-    // Ensure range headers are preserved for video streaming
-    if (req.headers['range']) {
-      res.setHeader('accept-ranges', 'bytes');
+    // Normalize URLs to always have https
+    if (location && !/^https?:\/\//i.test(location)) {
+      location = 'https://' + location;
     }
-
-    // Allow CORS for any embedded resource
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Headers", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-
-    return true;
+    return location;
   }
 }).listen(port, host, () => {
-  console.log(`🚀 Enhanced CORS Anywhere proxy running at http://${host}:${port}`);
+  console.log(`🚀 CORS Anywhere running at http://${host}:${port}`);
+});
+
+// --------------- Puppeteer Dynamic Loader -----------------
+app.get("/dynamic", async (req, res) => {
+  const target = req.query.url;
+  if (!target) return res.status(400).send("Missing URL");
+
+  try {
+    const browser = await puppeteer.launch({
+      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    });
+    const page = await browser.newPage();
+
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118 Safari/537.36"
+    );
+
+    await page.goto(target, { waitUntil: "networkidle2" });
+
+    // Optional: For Twitch or video sites, remove CSP/X-Frame restrictions
+    await page.evaluate(() => {
+      const metas = document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]');
+      metas.forEach(m => m.remove());
+      document.querySelectorAll("iframe").forEach(f => f.setAttribute("sandbox", ""));
+    });
+
+    const content = await page.content();
+    await browser.close();
+    res.set("Content-Type", "text/html");
+    res.send(content);
+
+  } catch (err) {
+    console.error("Puppeteer error:", err);
+    res.status(500).send("Failed to load dynamic content");
+  }
+});
+
+// --------------- Express Root ---------------
+// You can serve your frontend static files if desired
+app.use(express.static("public"));
+
+app.listen(port + 1, host, () => {
+  console.log(`🚀 Dynamic loader running at http://${host}:${port + 1}`);
 });
