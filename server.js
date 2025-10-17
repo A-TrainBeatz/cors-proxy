@@ -3,12 +3,16 @@ const host = process.env.HOST || '0.0.0.0';
 const port = process.env.PORT || 8080;
 
 cors_proxy.createServer({
-    originWhitelist: [],         // Allow all origins
-    requireHeader: [],           // Disable origin/x-requested-with requirement
-    removeHeaders: ['cookie', 'cookie2', 'x-frame-options', 'content-security-policy'],  // Strip restrictive headers
+    originWhitelist: [],
+    requireHeader: [],
+    removeHeaders: [
+        'cookie', 'cookie2', 
+        'x-frame-options', 
+        'content-security-policy'
+    ],
     setHeaders: {
-        'X-Frame-Options': '',           // Allow iframes
-        'Content-Security-Policy': ''    // Allow scripts/styles in srcdoc
+        'X-Frame-Options': '', 
+        'Content-Security-Policy': ''
     },
     redirectSameOrigin: true,
     proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
