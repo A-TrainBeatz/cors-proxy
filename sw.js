@@ -1,5 +1,5 @@
 const CACHE_NAME = 'warp-proxy-cache-v1';
-const BACKEND = 'https://cors-proxy-s2pk.onrender.com/proxy?url='; // absolute URL
+const BACKEND = 'https://your-backend.onrender.com/proxy?url='; // absolute URL
 
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => self.clients.claim());
@@ -12,7 +12,7 @@ self.addEventListener('fetch', e => {
 });
 
 async function handleRequest(req){
-  try {
+  try{
     const cached = await caches.match(req);
     if(cached) return cached;
 
@@ -46,7 +46,7 @@ async function handleRequest(req){
     cache.put(req,resClone.clone());
     return resClone;
 
-  } catch(err){
+  }catch(err){
     return new Response('<body style="font-family:sans-serif;color:#bbb;"><h3>Offline / Network Error</h3></body>',{
       headers:{'Content-Type':'text/html'}
     });
