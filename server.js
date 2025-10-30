@@ -20,31 +20,29 @@ app.use(express.raw({ type:"*/*", limit:"1gb" }));
 
 /* ===== Helper to rewrite links/forms ===== */
 function rewriteLinks(html, baseUrl, profile) {
-  // rewrite <a>
   html = html.replace(/<a\s+([^>]*?)href=["'](.*?)["']/gi, (m, attrs, href)=>{
     if(href.startsWith('#') || href.startsWith('javascript:')) return m;
     try{
       const full = new URL(href, baseUrl).href;
-      return `<a ${attrs} href="/proxy/${encodeURIComponent(full)}?profile=${profile}"`;
+      return `<a ${attrs} href="/proxy/${full}?profile=${profile}"`;
     } catch(e){ return m; }
   });
 
-  // rewrite <form>
   html = html.replace(/<form\s+([^>]*?)action=["'](.*?)["']/gi, (m, attrs, action)=>{
     if(action.startsWith('javascript:')) return m;
     try{
       const full = new URL(action, baseUrl).href;
-      return `<form ${attrs} action="/proxy/${encodeURIComponent(full)}?profile=${profile}"`;
+      return `<form ${attrs} action="/proxy/${full}?profile=${profile}"`;
     } catch(e){ return m; }
   });
 
   return html;
 }
 
-/* ===== HTTP/S Proxy with link rewriting ===== */
+/* ===== HTTP/S Proxy ===== */
 app.all("/proxy/*", async (req,res)=>{
   try{
-    const targetUrl = decodeURIComponent(req.path.replace("/proxy/",""));
+    const targetUrl = req.path.replace("/proxy/","");
     if(!targetUrl || !/^https?:\/\//i.test(targetUrl))
       return res.status(400).send("Invalid or missing URL in path.");
 
@@ -71,7 +69,6 @@ app.all("/proxy/*", async (req,res)=>{
       return res.send(body);
     }
 
-    // pass through other types
     proxyRes.headers.forEach((v,k)=>{
       if(["content-security-policy","x-frame-options"].includes(k.toLowerCase())) return;
       res.setHeader(k,v);
@@ -85,14 +82,14 @@ app.all("/proxy/*", async (req,res)=>{
   }
 });
 
-/* ===== WEBSOCKET PROXY ===== */
+/* ===== WebSocket Proxy ===== */
 const server = http.createServer(app);
 const wss = new createProxyServer({ ws:true });
 
 server.on("upgrade",(req,socket,head)=>{
-  const urlObj=new URL(req.url, `http://${req.headers.host}`);
+  const urlObj = new URL(req.url, `http://${req.headers.host}`);
   let targetUrl;
-  if(urlObj.pathname.startsWith("/proxy/")) targetUrl = decodeURIComponent(urlObj.pathname.replace("/proxy/",""));
+  if(urlObj.pathname.startsWith("/proxy/")) targetUrl = urlObj.pathname.replace("/proxy/","");
   else targetUrl = urlObj.searchParams.get("url");
 
   if(!targetUrl || !/^https?:\/\//i.test(targetUrl)) return socket.destroy();
