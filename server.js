@@ -8,7 +8,7 @@ import path from "path";
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-app.get("/sw.js",(req,res)=>res.sendFile(path.resolve("./sw.js")));
+app.get("/sw.js", (req,res)=>res.sendFile(path.resolve("./sw.js")));
 
 const PROFILES = {
   iphone:"Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
@@ -24,7 +24,7 @@ function rewriteLinks(html, baseUrl, profile) {
     if(href.startsWith('#') || href.startsWith('javascript:')) return m;
     try{
       const full = new URL(href, baseUrl).href;
-      return `<a ${attrs} href="/proxy/${full}?profile=${profile}"`;
+      return `<a ${attrs} href="/proxy?url=${encodeURIComponent(full)}&profile=${profile}"`;
     } catch(e){ return m; }
   });
 
@@ -32,7 +32,7 @@ function rewriteLinks(html, baseUrl, profile) {
     if(action.startsWith('javascript:')) return m;
     try{
       const full = new URL(action, baseUrl).href;
-      return `<form ${attrs} action="/proxy/${full}?profile=${profile}"`;
+      return `<form ${attrs} action="/proxy?url=${encodeURIComponent(full)}&profile=${profile}"`;
     } catch(e){ return m; }
   });
 
@@ -40,11 +40,11 @@ function rewriteLinks(html, baseUrl, profile) {
 }
 
 /* ===== HTTP/S Proxy ===== */
-app.all("/proxy/*", async (req,res)=>{
+app.all("/proxy", async (req,res)=>{
   try{
-    const targetUrl = req.path.replace("/proxy/","");
+    const targetUrl = req.query.url;
     if(!targetUrl || !/^https?:\/\//i.test(targetUrl))
-      return res.status(400).send("Invalid or missing URL in path.");
+      return res.status(400).send("Invalid or missing ?url= parameter.");
 
     const profile = req.query.profile || 'iphone';
     const target = new URL(targetUrl);
@@ -88,10 +88,7 @@ const wss = new createProxyServer({ ws:true });
 
 server.on("upgrade",(req,socket,head)=>{
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
-  let targetUrl;
-  if(urlObj.pathname.startsWith("/proxy/")) targetUrl = urlObj.pathname.replace("/proxy/","");
-  else targetUrl = urlObj.searchParams.get("url");
-
+  const targetUrl = urlObj.searchParams.get("url");
   if(!targetUrl || !/^https?:\/\//i.test(targetUrl)) return socket.destroy();
   const profile = urlObj.searchParams.get('profile') || 'iphone';
 
