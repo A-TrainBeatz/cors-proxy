@@ -1,12 +1,14 @@
 {
-  "name": "my-cors-proxy",
+  "name": "warp-proxy",
   "version": "1.0.0",
-  "description": "Self-hosted CORS proxy",
+  "type": "module",
   "main": "server.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2",
+    "http-proxy": "^1.18.1"
+  },
   "scripts": {
     "start": "node server.js"
-  },
-  "dependencies": {
-    "cors-anywhere": "^0.4.4"
   }
 }
