@@ -1,5 +1,5 @@
 const CACHE_NAME = 'warp-proxy-cache-v1';
-const BACKEND = 'https://your-backend.onrender.com/proxy?url='; // absolute URL
+const BACKEND = 'https://cors-proxy-s2pk.onrender.com/proxy?url='; // absolute URL
 
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => self.clients.claim());
