@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 const app = express();
 app.use(cors());
-app.use(express.text({ type: "*/*" }));
+app.use(express.text({ type: "**" }));
 
 // 👇 Base proxy URL
 const PROXY = "https://your-domain.com";
