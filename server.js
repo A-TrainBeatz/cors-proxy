@@ -1,37 +1,84 @@
-const cors_proxy = require('cors-anywhere');
-const host = process.env.HOST || '0.0.0.0';
-const port = process.env.PORT || 8080;
+import express from "express";
+import fetch from "node-fetch";
+import * as cheerio from "cheerio";
 
-cors_proxy.createServer({
-    originWhitelist: [],        // Allow all origins
-    requireHeader: [],          // Disable origin/x-requested-with requirement
-    removeHeaders: ['cookie', 'cookie2'],  // Strip cookies
-    setHeaders: {
-        'X-Frame-Options': '',          // Allow iframes
-        'Content-Security-Policy': ''   // Remove CSP frame restrictions
-    },
-    redirectSameOrigin: true,   // Follow redirects even on same origin
-    handleInitialRequest: (req, res, proxyReqOpts) => {
-        // No extra handling needed for initial request
-    },
-    proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
-        // Add user-agent header for sites that reject missing UA
-        proxyReqOpts.headers['User-Agent'] = srcReq.headers['user-agent'] || 'Mozilla/5.0';
-        return proxyReqOpts;
-    },
-    proxyResHeaderDecorator: (headers, userReq, userRes, proxyReq, proxyRes) => {
-        // Pass final URL after redirects to frontend
-        if (proxyRes.headers['x-request-url']) {
-            headers['X-Final-URL'] = proxyRes.headers['x-request-url'];
-        } else if (proxyRes.headers['location']) {
-            // If redirect location exists, combine with initial request
-            const loc = proxyRes.headers['location'];
-            headers['X-Final-URL'] = new URL(loc, `http://${userReq.headers.host}`).href;
-        } else {
-            headers['X-Final-URL'] = userReq.url.replace(/^\//,''); // fallback
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Force proxy URL format: /https://site.com/page
+app.get("/*", async (req, res) => {
+  let target = req.originalUrl.slice(1); // remove leading "/"
+
+  if (!target.startsWith("http")) {
+    return res.status(400).send("Invalid proxy request");
+  }
+
+  try {
+    const response = await fetch(target, {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    const text = await response.text();
+
+    // Return raw if not HTML
+    if (!contentType.includes("text/html")) {
+      res.set("content-type", contentType);
+      return res.send(text);
+    }
+
+    // Load & rewrite HTML
+    const $ = cheerio.load(text);
+    const base = new URL(target).origin;
+
+    // Rewrite <a>, <img>, <script>, <link>, <iframe>, <source>, CSS url(...)
+    $("a[href], img[src], script[src], link[href], iframe[src], source[src]").each(function () {
+      const attr = $(this).attr("href") ? "href" : "src";
+      let url = $(this).attr(attr);
+      if (!url) return;
+
+      try {
+        url = new URL(url, target).href;
+        $(this).attr(attr, `/${url}`);
+      } catch {}
+    });
+
+    // Inline style URL rewriter
+    $("*").each(function () {
+      let style = $(this).attr("style");
+      if (!style) return;
+      style = style.replace(/url\(['"]?(.*?)['"]?\)/g, (m, u) => {
+        try {
+          const full = new URL(u, target).href;
+          return `url(/${full})`;
+        } catch {
+          return m;
         }
-        return headers;
-    },
-}).listen(port, host, () => {
-    console.log(`🚀 Advanced proxy running on http://${host}:${port}`);
+      });
+      $(this).attr("style", style);
+    });
+
+    // Inject base and script
+    $("head").prepend(`<base href="${base}/">`);
+    $("body").append(`
+<script>
+document.addEventListener("click", e => {
+  let a = e.target.closest("a[href]");
+  if (!a) return;
+  let url = a.getAttribute("href");
+  if (!url.startsWith("http")) return;
+  e.preventDefault();
+  window.top.postMessage({ proxyNav: url }, "*");
 });
+</script>
+`);
+
+    res.set("content-type", "text/html");
+    res.send($.html());
+
+  } catch (err) {
+    res.status(500).send("Proxy error: " + err.message);
+  }
+});
+
+app.listen(PORT, () => console.log("Proxy running on port " + PORT));
