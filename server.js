@@ -1,84 +1,58 @@
 import express from "express";
 import fetch from "node-fetch";
-import * as cheerio from "cheerio";
+import cors from "cors";
+import { JSDOM } from "jsdom";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.use(cors());
+app.use(express.text({ type: "*/*" }));
 
-// Force proxy URL format: /https://site.com/page
-app.get("/*", async (req, res) => {
-  let target = req.originalUrl.slice(1); // remove leading "/"
+// 👇 Base proxy URL
+const PROXY = "https://your-domain.com";
 
-  if (!target.startsWith("http")) {
-    return res.status(400).send("Invalid proxy request");
-  }
+function rewriteHtml(html, baseUrl) {
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+
+  const rewrite = (el, attr) => {
+    const val = el.getAttribute(attr);
+    if (!val || val.startsWith("data:") || val.startsWith("javascript:")) return;
+    try {
+      const url = new URL(val, baseUrl).href;
+      el.setAttribute(attr, `${PROXY}/${url}`);
+    } catch {}
+  };
+
+  doc.querySelectorAll("[src]").forEach(el => rewrite(el, "src"));
+  doc.querySelectorAll("[href]").forEach(el => rewrite(el, "href"));
+
+  return "<!-- rewritten -->\n" + dom.serialize();
+}
+
+app.use(async (req, res) => {
+  const target = req.url.slice(1); 
+  if (!target.startsWith("http")) return res.status(400).send("Bad URL");
 
   try {
-    const response = await fetch(target, {
-      headers: { "User-Agent": "Mozilla/5.0" }
+    const upstream = await fetch(target, {
+      method: req.method,
+      headers: { ...req.headers, host: new URL(target).host },
+      body: req.method !== "GET" ? req.body : undefined
     });
 
-    const contentType = response.headers.get("content-type") || "";
-    const text = await response.text();
+    const contentType = upstream.headers.get("content-type") || "";
+    res.set("content-type", contentType);
 
-    // Return raw if not HTML
-    if (!contentType.includes("text/html")) {
-      res.set("content-type", contentType);
-      return res.send(text);
+    const data = await upstream.text();
+
+    if (contentType.includes("text/html")) {
+      return res.send(rewriteHtml(data, target));
     }
 
-    // Load & rewrite HTML
-    const $ = cheerio.load(text);
-    const base = new URL(target).origin;
-
-    // Rewrite <a>, <img>, <script>, <link>, <iframe>, <source>, CSS url(...)
-    $("a[href], img[src], script[src], link[href], iframe[src], source[src]").each(function () {
-      const attr = $(this).attr("href") ? "href" : "src";
-      let url = $(this).attr(attr);
-      if (!url) return;
-
-      try {
-        url = new URL(url, target).href;
-        $(this).attr(attr, `/${url}`);
-      } catch {}
-    });
-
-    // Inline style URL rewriter
-    $("*").each(function () {
-      let style = $(this).attr("style");
-      if (!style) return;
-      style = style.replace(/url\(['"]?(.*?)['"]?\)/g, (m, u) => {
-        try {
-          const full = new URL(u, target).href;
-          return `url(/${full})`;
-        } catch {
-          return m;
-        }
-      });
-      $(this).attr("style", style);
-    });
-
-    // Inject base and script
-    $("head").prepend(`<base href="${base}/">`);
-    $("body").append(`
-<script>
-document.addEventListener("click", e => {
-  let a = e.target.closest("a[href]");
-  if (!a) return;
-  let url = a.getAttribute("href");
-  if (!url.startsWith("http")) return;
-  e.preventDefault();
-  window.top.postMessage({ proxyNav: url }, "*");
-});
-</script>
-`);
-
-    res.set("content-type", "text/html");
-    res.send($.html());
-
+    res.send(data);
   } catch (err) {
     res.status(500).send("Proxy error: " + err.message);
   }
 });
 
-app.listen(PORT, () => console.log("Proxy running on port " + PORT));
+app.listen(3000, () => console.log("✅ Proxy running on :3000"));
