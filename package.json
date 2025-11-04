@@ -1,8 +1,7 @@
 {
-  "name": "power-proxy-godmode",
+  "name": "power-proxy-full",
   "version": "1.0.0",
   "type": "module",
-  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
@@ -11,6 +10,7 @@
     "express": "^4.18.2",
     "jsdom": "^24.1.0",
     "node-fetch": "^3.4.1",
-    "mime-types": "^2.1.35"
+    "mime-types": "^2.1.35",
+    "cookie": "^0.5.0"
   }
 }
